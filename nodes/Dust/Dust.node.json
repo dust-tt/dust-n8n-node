@@ -1,18 +1,18 @@
 {
-  "node": "n8n-nodes-base.Dust",
-  "nodeVersion": "1.0",
-  "codexVersion": "1.0",
-  "categories": ["Productivity"],
-  "resources": {
-    "credentialDocumentation": [
-      {
-        "url": "https://dust.tt/docs"
-      }
-    ],
-    "primaryDocumentation": [
-      {
-        "url": "https://dust.tt/docs"
-      }
-    ]
-  }
+	"node": "n8n-nodes-base.Dust",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Productivity"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://dust.tt/docs"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://docs.dust.tt/docs/n8n"
+			}
+		]
+	}
 }

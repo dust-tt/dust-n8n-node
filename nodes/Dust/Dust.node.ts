@@ -53,14 +53,14 @@ export class Dust implements INodeType {
 				],
 				default: 'talkToAssistant',
 			},
-			// Talk to Assistant Parameters
+			// Talk to Agent Parameters
 			{
 				displayName: 'Message',
 				name: 'message',
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'Message to send to the assistant',
+				description: 'Message to send to the agent',
 				displayOptions: {
 					show: {
 						operation: ['talkToAssistant'],
@@ -68,7 +68,7 @@ export class Dust implements INodeType {
 				},
 			},
 			{
-				displayName: 'Assistant Configuration ID',
+				displayName: 'Agent Configuration ID',
 				name: 'assistantConfigurationId',
 				type: 'string',
 				required: true,

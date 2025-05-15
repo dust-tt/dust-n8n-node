@@ -2,7 +2,7 @@
 
 This is an n8n community node. It lets you use Dust agents in your n8n workflows.
 
-Dust is a platform for creating custom AI assistants that combine leading AI models with company knowledge to help teams work better, leveraging RAG technology for accurate, contextual responses.
+Dust is a platform for creating custom AI agents that combine leading AI models with company knowledge to help teams work better, leveraging RAG technology for accurate, contextual responses.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -20,7 +20,7 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ## Operations
 
-- Talk to an Assistant
+- Talk to an Agent
 - Upload a Document
 
 ## Credentials
