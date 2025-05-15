@@ -4,7 +4,7 @@ import {
 	INodeTypeDescription,
 	IDataObject,
 	IHttpRequestMethods,
-	NodeApiError,
+	NodeConnectionType,
 } from 'n8n-workflow';
 
 export class Dust implements INodeType {
@@ -19,8 +19,8 @@ export class Dust implements INodeType {
 		defaults: {
 			name: 'Dust',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionType.Main],
+		outputs: [NodeConnectionType.Main],
 		credentials: [
 			{
 				name: 'dustApi',
@@ -278,10 +278,6 @@ export class Dust implements INodeType {
 
 					try {
 						const response = await this.helpers.httpRequest(requestOptions);
-						console.log('Response received:', {
-							status: 'success',
-							conversationId: response.conversation?.sId,
-						});
 
 						const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
 
@@ -300,10 +296,6 @@ export class Dust implements INodeType {
 							userMessage,
 						});
 					} catch (requestError) {
-						console.error('Request failed:', {
-							error: requestError.message,
-							stack: requestError.stack,
-						});
 						throw requestError;
 					}
 				} else if (operation === 'uploadDocument') {
@@ -350,47 +342,14 @@ export class Dust implements INodeType {
 						},
 					};
 
-					console.log('Upload request details:', {
-						fullUrl,
-						method: 'POST',
-						documentId,
-						contentLength: documentContent.length,
-						headers: uploadRequestOptions.headers,
-					});
-
 					try {
 						const response = await this.helpers.httpRequest(uploadRequestOptions);
-						console.log('Upload response received:', {
-							status: 'success',
-						});
 						returnData.push(response);
 					} catch (requestError) {
-						console.error('Upload request failed:', {
-							error: requestError.message,
-							stack: requestError.stack,
-						});
-
-						if (this.continueOnFail()) {
-							returnData.push({
-								error: requestError.message,
-								statusCode: requestError.response?.status,
-								details: requestError.response?.data,
-							});
-							continue;
-						}
-						throw new NodeApiError(this.getNode(), requestError);
+						throw requestError;
 					}
 				}
 			} catch (error) {
-				console.error('Operation failed:', {
-					operation,
-					error: error.message,
-					stack: error.stack,
-				});
-				if (this.continueOnFail()) {
-					returnData.push({ error: error.message });
-					continue;
-				}
 				throw error;
 			}
 		}
