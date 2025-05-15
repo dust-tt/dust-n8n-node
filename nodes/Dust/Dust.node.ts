@@ -244,6 +244,7 @@ export class Dust implements INodeType {
 
 					const body = {
 						blocking: true,
+						skipToolsValidation: true,
 						title: null,
 						visibility: 'unlisted',
 						message: {
