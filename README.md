@@ -40,5 +40,7 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ## Version history
 
+- 0.1.1
+  - Add SkipToolsValidation + rename assitant to agent
 - 0.1.0
   - Initial release
