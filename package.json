@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-dust",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Dust for n8n: Talk to your AI agents and upload documents to Dust",
 	"keywords": [
 		"n8n-community-node-package"
@@ -26,8 +26,7 @@
 		"dev": "tsc --watch",
 		"format": "prettier nodes credentials --write",
 		"lint": "eslint nodes credentials package.json",
-		"lintfix": "eslint nodes credentials package.json --fix",
-		"prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes credentials package.json"
+		"lintfix": "eslint nodes credentials package.json --fix"
 	},
 	"files": [
 		"dist"

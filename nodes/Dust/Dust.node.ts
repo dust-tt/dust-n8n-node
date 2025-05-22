@@ -199,9 +199,20 @@ export class Dust implements INodeType {
 					{
 						displayName: 'Tags',
 						name: 'tags',
-						type: 'string',
-						default: '',
-						description: 'Comma-separated list of tags to associate with the document',
+						type: 'fixedCollection',
+						typeOptions: {
+							multipleValues: true,
+						},
+						default: {},
+						description: 'List of tags to associate with the document',
+						options: [
+							{
+								displayName: 'Tag',
+								name: 'tag',
+								type: 'string',
+								default: '',
+							},
+						],
 					},
 					{
 						displayName: 'Async Upload',
@@ -324,7 +335,7 @@ export class Dust implements INodeType {
 					const section: IDataObject = {};
 					if (additionalFields.source_url) section.source_url = additionalFields.source_url;
 					if (additionalFields.tags) {
-						section.tags = (additionalFields.tags as string).split(',').map((tag) => tag.trim());
+						section.tags = (additionalFields.tags as IDataObject[]).map((tagObj) => tagObj.tag);
 					}
 
 					if (Object.keys(section).length > 0) {
