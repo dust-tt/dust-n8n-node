@@ -5,6 +5,8 @@ import {
 	IDataObject,
 	IHttpRequestMethods,
 	NodeConnectionType,
+	ILoadOptionsFunctions,
+	INodePropertyOptions,
 } from 'n8n-workflow';
 
 export class Dust implements INodeType {
@@ -68,9 +70,12 @@ export class Dust implements INodeType {
 				},
 			},
 			{
-				displayName: 'Agent Configuration ID',
+				displayName: 'Agent',
 				name: 'assistantConfigurationId',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getAgents',
+				},
 				required: true,
 				default: '',
 				displayOptions: {
@@ -221,6 +226,35 @@ export class Dust implements INodeType {
 				],
 			},
 		],
+	};
+
+	methods = {
+		loadOptions: {
+			async getAgents(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				const credentials = await this.getCredentials('dustApi');
+				const baseUrl = credentials.region === 'EU' ? 'https://eu.dust.tt' : 'https://dust.tt';
+				
+				const options = {
+					method: 'GET' as IHttpRequestMethods,
+					url: `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/agent_configurations`,
+					headers: {
+						'Content-Type': 'application/json',
+						'Accept': 'application/json',
+						'Authorization': `Bearer ${credentials.apiKey}`,
+					},
+				};
+
+				try {
+					const response = await this.helpers.httpRequest(options);
+					return response.agentConfigurations.map((ac: any) => ({
+						name: ac.name,
+						value: ac.sId,
+					}));
+				} catch (error) {
+					throw error;
+				}
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions) {
