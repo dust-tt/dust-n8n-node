@@ -246,10 +246,12 @@ export class Dust implements INodeType {
 
 				try {
 					const response = await this.helpers.httpRequest(options);
-					return response.agentConfigurations.map((ac: any) => ({
-						name: ac.name,
-						value: ac.sId,
-					}));
+					return response.agentConfigurations
+						.map((ac: any) => ({
+							name: ac.name,
+							value: ac.sId,
+						}))
+						.sort((a: any, b: any) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 				} catch (error) {
 					throw error;
 				}
