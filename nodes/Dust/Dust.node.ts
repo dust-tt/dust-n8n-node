@@ -21,8 +21,8 @@ export class Dust implements INodeType {
 		defaults: {
 			name: 'Dust',
 		},
-		inputs: [NodeConnectionType.Main],
-		outputs: [NodeConnectionType.Main],
+		inputs: ['main'],
+		outputs: ['main'],
 		credentials: [
 			{
 				name: 'dustApi',
@@ -70,9 +70,11 @@ export class Dust implements INodeType {
 				},
 			},
 			{
-				displayName: 'Agent',
+				displayName: 'Agent Name or ID',
 				name: 'assistantConfigurationId',
 				type: 'options',
+				description:
+					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 				typeOptions: {
 					loadOptionsMethod: 'getAgents',
 				},
@@ -181,11 +183,19 @@ export class Dust implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Title',
-						name: 'title',
-						type: 'string',
-						default: '',
-						description: 'The title of the document',
+						displayName: 'Async Upload',
+						name: 'async',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to perform the upload asynchronously',
+					},
+					{
+						displayName: 'Light Document Output',
+						name: 'light_document_output',
+						type: 'boolean',
+						default: false,
+						description:
+							'Whether to return a lightweight version of the document (excluding text, chunks and vectors)',
 					},
 					{
 						displayName: 'MIME Type',
@@ -209,19 +219,11 @@ export class Dust implements INodeType {
 						description: 'Comma-separated list of tags to associate with the document',
 					},
 					{
-						displayName: 'Async Upload',
-						name: 'async',
-						type: 'boolean',
-						default: false,
-						description: 'Whether to perform the upload asynchronously',
-					},
-					{
-						displayName: 'Light Document Output',
-						name: 'light_document_output',
-						type: 'boolean',
-						default: false,
-						description:
-							'Whether to return a lightweight version of the document (excluding text, chunks and vectors)',
+						displayName: 'Title',
+						name: 'title',
+						type: 'string',
+						default: '',
+						description: 'The title of the document',
 					},
 				],
 			},
@@ -233,14 +235,14 @@ export class Dust implements INodeType {
 			async getAgents(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const credentials = await this.getCredentials('dustApi');
 				const baseUrl = credentials.region === 'EU' ? 'https://eu.dust.tt' : 'https://dust.tt';
-				
+
 				const options = {
 					method: 'GET' as IHttpRequestMethods,
 					url: `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/agent_configurations`,
 					headers: {
 						'Content-Type': 'application/json',
-						'Accept': 'application/json',
-						'Authorization': `Bearer ${credentials.apiKey}`,
+						Accept: 'application/json',
+						Authorization: `Bearer ${credentials.apiKey}`,
 					},
 				};
 

@@ -1,14 +1,14 @@
 {
 	"name": "n8n-nodes-dust",
-	"version": "0.1.5",
-	"description": "Dust for n8n: Talk to your AI agents and upload documents to Dust",
+	"version": "0.1.6",
+	"description": "Dust.tt node for n8n",
 	"keywords": [
 		"n8n-community-node-package"
 	],
 	"license": "MIT",
-	"homepage": "https://dust.tt",
+	"homepage": "",
 	"author": {
-		"name": "Alban Dumouilla - Dust",
+		"name": "Alban Dumouilla",
 		"email": "alban@dust.tt"
 	},
 	"repository": {
@@ -16,17 +16,16 @@
 		"url": "https://github.com/dust-tt/dust-n8n-node.git"
 	},
 	"engines": {
-		"node": ">=18.10",
-		"pnpm": ">=9.1"
+		"node": ">=20.15"
 	},
-	"packageManager": "pnpm@10.12.4",
 	"main": "index.js",
 	"scripts": {
-		"build": "tsc && gulp build:icons",
+		"build": "npx rimraf dist && tsc && gulp build:icons",
 		"dev": "tsc --watch",
 		"format": "prettier nodes credentials --write",
 		"lint": "eslint nodes credentials package.json",
-		"lintfix": "eslint nodes credentials package.json --fix"
+		"lintfix": "eslint nodes credentials package.json --fix",
+		"prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes credentials package.json"
 	},
 	"files": [
 		"dist"
@@ -34,31 +33,23 @@
 	"n8n": {
 		"n8nNodesApiVersion": 1,
 		"credentials": [
-			"dist/credentials/DustApi.credentials.js"
+			"dist/credentials/ExampleCredentialsApi.credentials.js",
+			"dist/credentials/HttpBinApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/Dust/Dust.node.js"
+			"dist/nodes/ExampleNode/ExampleNode.node.js",
+			"dist/nodes/HttpBin/HttpBin.node.js"
 		]
 	},
 	"devDependencies": {
-		"@typescript-eslint/parser": "^8.38.0",
-		"eslint": "^9.32.0",
+		"@typescript-eslint/parser": "~8.32.0",
+		"eslint": "^8.57.0",
 		"eslint-plugin-n8n-nodes-base": "^1.16.3",
-		"form-data": "^4.0.4",
-		"gulp": "^5.0.1",
-		"n8n-workflow": "^1.102.0",
-		"prettier": "^3.6.2",
-		"typescript": "^5.8.3"
+		"gulp": "^5.0.0",
+		"prettier": "^3.5.3",
+		"typescript": "^5.8.2"
 	},
 	"peerDependencies": {
 		"n8n-workflow": "*"
-	},
-	"pnpm": {
-		"overrides": {
-			"form-data": "^4.0.4"
-		}
-	},
-	"publishConfig": {
-		"access": "public"
 	}
 }
