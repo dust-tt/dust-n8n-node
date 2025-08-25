@@ -60,6 +60,9 @@ export class DustApi implements ICredentialType {
 			baseURL: '={{$credentials.region === "EU" ? "https://eu.dust.tt" : "https://dust.tt"}}',
 			url: '/api/v1/w/{{$credentials.workspaceId}}/assistant/agent_configurations',
 			method: 'GET',
+			headers: {
+				accept: 'application/json',
+			},
 		},
 	};
 }
