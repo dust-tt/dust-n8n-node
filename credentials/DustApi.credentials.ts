@@ -1,4 +1,9 @@
-import { IAuthenticateGeneric, ICredentialType, INodeProperties } from 'n8n-workflow';
+import {
+	IAuthenticateGeneric,
+	ICredentialTestRequest,
+	ICredentialType,
+	INodeProperties,
+} from 'n8n-workflow';
 
 export class DustApi implements ICredentialType {
 	name = 'dustApi';
@@ -49,4 +54,12 @@ export class DustApi implements ICredentialType {
 			default: 'US',
 		},
 	];
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: '={{$credentials.region === "EU" ? "https://dust.tt" : "https://dust.tt"}}',
+			url: '/api/v1/w/{{$credentials.workspaceId}}/data_sources',
+			method: 'GET',
+		},
+	};
 }
