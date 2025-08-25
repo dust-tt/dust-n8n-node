@@ -61,7 +61,7 @@ export class DustApi implements ICredentialType {
 			url: '/api/v1/w/{{$credentials.workspaceId}}/assistant/agent_configurations',
 			method: 'GET',
 			headers: {
-				accept: 'application/json',
+				Authorization: '=Bearer {{$credentials.apiKey}}',
 			},
 		},
 	};
