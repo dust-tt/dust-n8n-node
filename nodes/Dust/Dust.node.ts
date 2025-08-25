@@ -4,7 +4,6 @@ import {
 	INodeTypeDescription,
 	IDataObject,
 	IHttpRequestMethods,
-	NodeConnectionType,
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 } from 'n8n-workflow';
