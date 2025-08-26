@@ -57,11 +57,10 @@ export class DustApi implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '{{$credentials.region === "EU" ? "https://eu.dust.tt" : "https://dust.tt"}}',
-			url: '/api/v1/w/{{$credentials.workspaceId}}/assistant/agent_configurations',
+			url: '={{$credentials.region === "EU" ? "https://eu.dust.tt" : "https://dust.tt"}}/api/v1/w/{{$credentials.workspaceId}}/assistant/agent_configurations',
 			method: 'GET',
 			headers: {
-				Authorization: 'Bearer {{$credentials.apiKey}}',
+				Authorization: '=Bearer {{$credentials.apiKey}}',
 			},
 		},
 	};
