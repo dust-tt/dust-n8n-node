@@ -328,9 +328,12 @@ export class Dust implements INodeType {
 						const userMessage = response.conversation.content.flat()[0];
 
 						returnData.push({
-							agentMessage: agentMessageStr,
-							conversationUrl,
-							userMessage,
+							json: {
+								agentMessage: agentMessageStr,
+								conversationUrl,
+								userMessage,
+							},
+							pairedItem: { item: i }
 						});
 					} catch (requestError) {
 						throw requestError;
@@ -377,7 +380,10 @@ export class Dust implements INodeType {
 
 					try {
 						const response = await this.helpers.httpRequest(uploadRequestOptions);
-						returnData.push(response);
+						returnData.push({
+							json: response,
+							pairedItem: { item: i }
+						});
 					} catch (requestError) {
 						throw requestError;
 					}
