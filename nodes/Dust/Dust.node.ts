@@ -241,12 +241,15 @@ export class Dust implements INodeType {
 					headers: {
 						'Content-Type': 'application/json',
 						Accept: 'application/json',
-						Authorization: `Bearer ${credentials.apiKey}`,
 					},
 				};
 
 				try {
-					const response = await this.helpers.httpRequest(options);
+					const response = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'dustApi',
+						options,
+					);
 					return response.agentConfigurations
 						.map((ac: any) => ({
 							name: ac.name,
@@ -309,12 +312,15 @@ export class Dust implements INodeType {
 						headers: {
 							Accept: 'application/json',
 							'Content-Type': 'application/json',
-							Authorization: `Bearer ${credentials.apiKey}`,
 						},
 					};
 
 					try {
-						const response = await this.helpers.httpRequest(requestOptions);
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'dustApi',
+							requestOptions,
+						);
 
 						const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
 
@@ -374,12 +380,15 @@ export class Dust implements INodeType {
 						headers: {
 							Accept: 'application/json',
 							'Content-Type': 'application/json',
-							Authorization: `Bearer ${credentials.apiKey}`,
 						},
 					};
 
 					try {
-						const response = await this.helpers.httpRequest(uploadRequestOptions);
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'dustApi',
+							uploadRequestOptions,
+						);
 						returnData.push({
 							json: response,
 							pairedItem: { item: i }
