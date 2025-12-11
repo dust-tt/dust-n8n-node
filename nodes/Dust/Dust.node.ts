@@ -6,6 +6,7 @@ import {
 	IHttpRequestMethods,
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
+	NodeConnectionTypes,
 } from 'n8n-workflow';
 
 export class Dust implements INodeType {
@@ -15,44 +16,76 @@ export class Dust implements INodeType {
 		icon: 'file:dust.svg',
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"]}}',
+		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Interact with Dust API',
 		defaults: {
 			name: 'Dust',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'dustApi',
 				required: true,
 			},
 		],
-		requestDefaults: {
-			baseURL: '={{$credentials.region === "EU" ? "https://eu.dust.tt" : "https://dust.tt"}}',
-			headers: {
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
-				Authorization: 'Bearer ={{$credentials.apiKey}}',
-			},
-		},
 		properties: [
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Agent',
+						value: 'agent',
+					},
+					{
+						name: 'Document',
+						value: 'document',
+					},
+				],
+				default: 'agent',
+			},
 			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['agent'],
+					},
+				},
 				options: [
 					{
-						name: 'Talk to an Agent',
+						name: 'Talk To',
 						value: 'talkToAssistant',
-					},
-					{
-						name: 'Upload a Document',
-						value: 'uploadDocument',
+						description: 'Send a message to an agent',
+						action: 'Talk to an agent',
 					},
 				],
 				default: 'talkToAssistant',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['document'],
+					},
+				},
+				options: [
+					{
+						name: 'Upload',
+						value: 'uploadDocument',
+						description: 'Upload a document to a data source',
+						action: 'Upload a document',
+					},
+				],
+				default: 'uploadDocument',
 			},
 			// Talk to Agent Parameters
 			{
@@ -64,6 +97,7 @@ export class Dust implements INodeType {
 				description: 'Message to send to the agent',
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -81,6 +115,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -93,6 +128,7 @@ export class Dust implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -127,6 +163,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -140,6 +177,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -152,6 +190,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -164,6 +203,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -177,6 +217,7 @@ export class Dust implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -315,35 +356,31 @@ export class Dust implements INodeType {
 						},
 					};
 
-					try {
-						const response = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'dustApi',
-							requestOptions,
-						);
+					const response = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'dustApi',
+						requestOptions,
+					);
 
-						const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
+					const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
 
-						const agentMessages = response.conversation.content
-							.flat()
-							.filter((m: any) => m.type === 'agent_message')
-							.map((am: any) => am.content);
+					const agentMessages = response.conversation.content
+						.flat()
+						.filter((m: any) => m.type === 'agent_message')
+						.map((am: any) => am.content);
 
-						const agentMessageStr =
-							agentMessages.length === 0 ? 'No message returned' : agentMessages.join('\n');
-						const userMessage = response.conversation.content.flat()[0];
+					const agentMessageStr =
+						agentMessages.length === 0 ? 'No message returned' : agentMessages.join('\n');
+					const userMessage = response.conversation.content.flat()[0];
 
-						returnData.push({
-							json: {
-								agentMessage: agentMessageStr,
-								conversationUrl,
-								userMessage,
-							},
-							pairedItem: { item: i }
-						});
-					} catch (requestError) {
-						throw requestError;
-					}
+					returnData.push({
+						json: {
+							agentMessage: agentMessageStr,
+							conversationUrl,
+							userMessage,
+						},
+						pairedItem: { item: i },
+					});
 				} else if (operation === 'uploadDocument') {
 					const spaceId = this.getNodeParameter('spaceId', i) as string;
 					const dataSourceName = this.getNodeParameter('dataSourceName', i) as string;
@@ -383,21 +420,24 @@ export class Dust implements INodeType {
 						},
 					};
 
-					try {
-						const response = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'dustApi',
-							uploadRequestOptions,
-						);
-						returnData.push({
-							json: response,
-							pairedItem: { item: i }
-						});
-					} catch (requestError) {
-						throw requestError;
-					}
+					const response = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'dustApi',
+						uploadRequestOptions,
+					);
+					returnData.push({
+						json: response,
+						pairedItem: { item: i },
+					});
 				}
 			} catch (error) {
+				if (this.continueOnFail()) {
+					returnData.push({
+						json: { error: (error as Error).message },
+						pairedItem: { item: i },
+					});
+					continue;
+				}
 				throw error;
 			}
 		}
