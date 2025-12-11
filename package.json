@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-dust",
-	"version": "0.1.69",
+	"version": "0.1.70",
 	"description": "Dust.tt node for n8n",
 	"keywords": [
 		"n8n-community-node-package"
