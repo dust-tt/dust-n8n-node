@@ -6,6 +6,7 @@ import {
 	IHttpRequestMethods,
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
+	NodeConnectionTypes,
 } from 'n8n-workflow';
 
 export class Dust implements INodeType {
@@ -15,44 +16,76 @@ export class Dust implements INodeType {
 		icon: 'file:dust.svg',
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"]}}',
+		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Interact with Dust API',
 		defaults: {
 			name: 'Dust',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'dustApi',
 				required: true,
 			},
 		],
-		requestDefaults: {
-			baseURL: '={{$credentials.region === "EU" ? "https://eu.dust.tt" : "https://dust.tt"}}',
-			headers: {
-				Accept: 'application/json',
-				'Content-Type': 'application/json',
-				Authorization: 'Bearer ={{$credentials.apiKey}}',
-			},
-		},
 		properties: [
+			{
+				displayName: 'Resource',
+				name: 'resource',
+				type: 'options',
+				noDataExpression: true,
+				options: [
+					{
+						name: 'Agent',
+						value: 'agent',
+					},
+					{
+						name: 'Document',
+						value: 'document',
+					},
+				],
+				default: 'agent',
+			},
 			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
 				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['agent'],
+					},
+				},
 				options: [
 					{
-						name: 'Talk to an Agent',
+						name: 'Talk To',
 						value: 'talkToAssistant',
-					},
-					{
-						name: 'Upload a Document',
-						value: 'uploadDocument',
+						description: 'Send a message to an agent',
+						action: 'Talk to an agent',
 					},
 				],
 				default: 'talkToAssistant',
+			},
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				noDataExpression: true,
+				displayOptions: {
+					show: {
+						resource: ['document'],
+					},
+				},
+				options: [
+					{
+						name: 'Upload',
+						value: 'uploadDocument',
+						description: 'Upload a document to a data source',
+						action: 'Upload a document',
+					},
+				],
+				default: 'uploadDocument',
 			},
 			// Talk to Agent Parameters
 			{
@@ -64,6 +97,7 @@ export class Dust implements INodeType {
 				description: 'Message to send to the agent',
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -81,6 +115,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -93,6 +128,7 @@ export class Dust implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['agent'],
 						operation: ['talkToAssistant'],
 					},
 				},
@@ -146,6 +182,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -159,6 +196,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -171,6 +209,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -183,6 +222,7 @@ export class Dust implements INodeType {
 				default: '',
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -196,6 +236,7 @@ export class Dust implements INodeType {
 				default: {},
 				displayOptions: {
 					show: {
+						resource: ['document'],
 						operation: ['uploadDocument'],
 					},
 				},
@@ -341,205 +382,201 @@ export class Dust implements INodeType {
 						},
 					};
 
-					try {
-						const response = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'dustApi',
-							requestOptions,
-						);
+					const response = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'dustApi',
+						requestOptions,
+					);
 
-						const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
-						const flatContent = response.conversation?.content?.flat?.() ?? [];
-						const userMessages = flatContent.filter((m: any) => m?.type === 'user_message');
-						const userMessageObj = userMessages.length > 0 ? userMessages[userMessages.length - 1] : undefined;
-						const userMessageId = userMessageObj?.sId as string | undefined;
+					const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
+					const flatContent = response.conversation?.content?.flat?.() ?? [];
+					const userMessages = flatContent.filter((m: any) => m?.type === 'user_message');
+					const userMessageObj = userMessages.length > 0 ? userMessages[userMessages.length - 1] : undefined;
+					const userMessageId = userMessageObj?.sId as string | undefined;
 
-						if (!streamEvents) {
-							// Blocking to get response from agent
-							const agentMessages = response.conversation.content
-								.flat()
-								.filter((m: any) => m.type === 'agent_message')
-								.map((am: any) => am.content);
+					if (!streamEvents) {
+						// Blocking to get response from agent
+						const agentMessages = response.conversation.content
+							.flat()
+							.filter((m: any) => m.type === 'agent_message')
+							.map((am: any) => am.content);
 
-							const nonEmptyAgentMessages = agentMessages
-								.map((m: any) => (typeof m === 'string' ? m.trim() : ''))
-								.filter((m: string) => m.length > 0);
-							const agentMessageStr =
-								nonEmptyAgentMessages.length === 0
-									? 'No message returned'
-									: nonEmptyAgentMessages.join('\n');
-							const userMessage = response.conversation.content.flat()[0];
+						const nonEmptyAgentMessages = agentMessages
+							.map((m: any) => (typeof m === 'string' ? m.trim() : ''))
+							.filter((m: string) => m.length > 0);
+						const agentMessageStr =
+							nonEmptyAgentMessages.length === 0
+								? 'No message returned'
+								: nonEmptyAgentMessages.join('\n');
+						const userMessage = response.conversation.content.flat()[0];
 
-							returnData.push({
-								json: {
-									agentMessage: agentMessageStr,
-									conversationUrl,
-									userMessage,
-								},
-								pairedItem: { item: i }
-							});
-						} else {
-							// Stream SSE events until completion
-							const conversationId = response.conversation.sId as string;
-							const eventsUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}/events`;
+						returnData.push({
+							json: {
+								agentMessage: agentMessageStr,
+								conversationUrl,
+								userMessage,
+							},
+							pairedItem: { item: i },
+						});
+					} else {
+						// Stream SSE events until completion
+						const conversationId = response.conversation.sId as string;
+						const eventsUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}/events`;
 
-							const controller = new (globalThis as any).AbortController();
-							const timeout = (globalThis as any).setTimeout(() => controller.abort(), streamTimeoutSeconds * 1000);
+						const controller = new (globalThis as any).AbortController();
+						const timeout = (globalThis as any).setTimeout(() => controller.abort(), streamTimeoutSeconds * 1000);
 
-							try {
-								const events: Array<any> = [];
-								let completed = false;
-								let lastEventId: string | undefined = undefined;
-								let streamError: any = null;
+						try {
+							const events: Array<any> = [];
+							let completed = false;
+							let lastEventId: string | undefined = undefined;
+							let streamError: any = null;
 
-								while (!completed) {
-									const headers: Record<string, string> = {
-										Accept: 'text/event-stream',
-										Authorization: `Bearer ${credentials.apiKey}`,
-									};
-									if (lastEventId) {
-										headers['Last-Event-ID'] = lastEventId;
-									}
-
-									const sseRes = await (globalThis as any).fetch(eventsUrl, {
-										method: 'GET',
-										headers,
-										signal: controller.signal,
-									} as any);
-
-									if (!(sseRes as any).ok || !(sseRes as any).body) {
-										throw new Error(
-											`Failed to open SSE stream: ${(sseRes as any).status} ${(sseRes as any).statusText}`,
-										);
-									}
-
-									const reader = (sseRes as any).body.getReader();
-									const decoder = new (globalThis as any).TextDecoder('utf-8');
-
-									let buffer = '';
-									let shouldReconnect = false;
-
-									while (true) {
-										const { value, done } = await reader.read();
-										if (done) break;
-
-										buffer += decoder.decode(value, { stream: true });
-										const chunks = buffer.split('\n\n');
-										buffer = chunks.pop() || '';
-
-										for (const chunk of chunks) {
-											const lines = chunk.split('\n');
-											let dataStr = '';
-
-											for (const line of lines) {
-												if (line.startsWith('data:')) dataStr += line.slice(5).trim();
-											}
-
-											if (!dataStr) continue;
-
-											const trimmed = dataStr.trim();
-											if (trimmed === 'done') {
-												shouldReconnect = true;
-												break; // exit inner read loop to reconnect
-											}
-
-											let parsed: any = undefined;
-											try {
-												parsed = JSON.parse(dataStr);
-											} catch (error) {
-												throw error;
-											}
-
-											const payload = parsed?.data;
-											events.push(payload);
-
-											// Track last event id for resume
-											if (typeof parsed?.eventId === 'string') {
-												lastEventId = parsed.eventId;
-											}
-
-											// Stop ONLY on agent_message_done
-											const payloadType = payload?.type ?? "undefined";
-											if (payloadType === 'agent_message_done') {
-												// If the agent completion signals an error status, capture and stop
-												const status = payload?.status ?? "undefined";
-												if (typeof status === 'string' && status.toLowerCase() !== 'success') {
-													streamError = {
-														status,
-														conversationId: payload?.conversationId,
-														messageId: payload?.messageId,
-														raw: parsed,
-													};
-												}
-												completed = true;
-												break;
-											}
-										}
-
-										if (completed || shouldReconnect) break;
-									}
-
-									// If server said 'done', reconnect unless completed
-									if (completed) break;
-									if (!shouldReconnect) {
-										// Connection ended without 'done' and without completion -> reconnect as well
-										// Overall timeout will still govern the total wait
-										continue;
-									}
+							while (!completed) {
+								const headers: Record<string, string> = {
+									Accept: 'text/event-stream',
+									Authorization: `Bearer ${credentials.apiKey}`,
+								};
+								if (lastEventId) {
+									headers['Last-Event-ID'] = lastEventId;
 								}
 
-								// If stream reported an error, fail the node with context
-								if (streamError) {
+								const sseRes = await (globalThis as any).fetch(eventsUrl, {
+									method: 'GET',
+									headers,
+									signal: controller.signal,
+								} as any);
+
+								if (!(sseRes as any).ok || !(sseRes as any).body) {
 									throw new Error(
-										`Dust agent run failed (status=${streamError.status}) for conversationId=${streamError.conversationId || 'unknown'}, messageId=${streamError.messageId || 'unknown'}`,
+										`Failed to open SSE stream: ${(sseRes as any).status} ${(sseRes as any).statusText}`,
 									);
 								}
 
-								// Always fetch final conversation to read agent messages after completion
-								let finalAgentMessage: string | null = null;
-								const convGet = await this.helpers.httpRequestWithAuthentication.call(
-									this,
-									'dustApi',
-									{
-										method: 'GET' as IHttpRequestMethods,
-										url: `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}`,
-										headers: {
-											Accept: 'application/json',
-										},
-									},
-								);
-								try {
-									const convFlat = convGet.conversation?.content?.flat?.() ?? [];
-									const convAgentAll = convFlat.filter?.((m: any) => m?.type === 'agent_message') ?? [];
-									const convAgentForThisUser =
-										userMessageId
-											? convAgentAll.filter((m: any) => m?.parentMessageId === userMessageId)
-											: convAgentAll;
-									const convAgentMessages = convAgentForThisUser
-										.map?.((am: any) => am?.content)
-										?.filter?.((c: any) => typeof c === 'string' && c.length > 0);
-									if (Array.isArray(convAgentMessages) && convAgentMessages.length > 0) {
-										finalAgentMessage = convAgentMessages.join('\n');
+								const reader = (sseRes as any).body.getReader();
+								const decoder = new (globalThis as any).TextDecoder('utf-8');
+
+								let buffer = '';
+								let shouldReconnect = false;
+
+								while (true) {
+									const { value, done } = await reader.read();
+									if (done) break;
+
+									buffer += decoder.decode(value, { stream: true });
+									const chunks = buffer.split('\n\n');
+									buffer = chunks.pop() || '';
+
+									for (const chunk of chunks) {
+										const lines = chunk.split('\n');
+										let dataStr = '';
+
+										for (const line of lines) {
+											if (line.startsWith('data:')) dataStr += line.slice(5).trim();
+										}
+
+										if (!dataStr) continue;
+
+										const trimmed = dataStr.trim();
+										if (trimmed === 'done') {
+											shouldReconnect = true;
+											break; // exit inner read loop to reconnect
+										}
+
+										let parsed: any = undefined;
+										try {
+											parsed = JSON.parse(dataStr);
+										} catch (error) {
+											throw error;
+										}
+
+										const payload = parsed?.data;
+										events.push(payload);
+
+										// Track last event id for resume
+										if (typeof parsed?.eventId === 'string') {
+											lastEventId = parsed.eventId;
+										}
+
+										// Stop ONLY on agent_message_done
+										const payloadType = payload?.type ?? "undefined";
+										if (payloadType === 'agent_message_done') {
+											// If the agent completion signals an error status, capture and stop
+											const status = payload?.status ?? "undefined";
+											if (typeof status === 'string' && status.toLowerCase() !== 'success') {
+												streamError = {
+													status,
+													conversationId: payload?.conversationId,
+													messageId: payload?.messageId,
+													raw: parsed,
+												};
+											}
+											completed = true;
+											break;
+										}
 									}
-								} catch (error) {
-									throw error;
+
+									if (completed || shouldReconnect) break;
 								}
 
-								returnData.push({
-									json: {
-										agentMessage: finalAgentMessage ?? 'No message returned',
-										conversationUrl,
-										userMessage: userMessageObj ?? body.message,
-										events,
-									},
-									pairedItem: { item: i }
-								});
-							} finally {
-								(globalThis as any).clearTimeout(timeout);
+								// If server said 'done', reconnect unless completed
+								if (completed) break;
+								if (!shouldReconnect) {
+									// Connection ended without 'done' and without completion -> reconnect as well
+									// Overall timeout will still govern the total wait
+									continue;
+								}
 							}
+
+							// If stream reported an error, fail the node with context
+							if (streamError) {
+								throw new Error(
+									`Dust agent run failed (status=${streamError.status}) for conversationId=${streamError.conversationId || 'unknown'}, messageId=${streamError.messageId || 'unknown'}`,
+								);
+							}
+
+							// Always fetch final conversation to read agent messages after completion
+							let finalAgentMessage: string | null = null;
+							const convGet = await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'dustApi',
+								{
+									method: 'GET' as IHttpRequestMethods,
+									url: `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}`,
+									headers: {
+										Accept: 'application/json',
+									},
+								},
+							);
+							try {
+								const convFlat = convGet.conversation?.content?.flat?.() ?? [];
+								const convAgentAll = convFlat.filter?.((m: any) => m?.type === 'agent_message') ?? [];
+								const convAgentForThisUser =
+									userMessageId
+										? convAgentAll.filter((m: any) => m?.parentMessageId === userMessageId)
+										: convAgentAll;
+								const convAgentMessages = convAgentForThisUser
+									.map?.((am: any) => am?.content)
+									?.filter?.((c: any) => typeof c === 'string' && c.length > 0);
+								if (Array.isArray(convAgentMessages) && convAgentMessages.length > 0) {
+									finalAgentMessage = convAgentMessages.join('\n');
+								}
+							} catch (error) {
+								throw error;
+							}
+
+							returnData.push({
+								json: {
+									agentMessage: finalAgentMessage ?? 'No message returned',
+									conversationUrl,
+									userMessage: userMessageObj ?? body.message,
+									events,
+								},
+								pairedItem: { item: i },
+							});
+						} finally {
+							(globalThis as any).clearTimeout(timeout);
 						}
-					} catch (requestError) {
-						throw requestError;
 					}
 				} else if (operation === 'uploadDocument') {
 					const spaceId = this.getNodeParameter('spaceId', i) as string;
@@ -580,21 +617,24 @@ export class Dust implements INodeType {
 						},
 					};
 
-					try {
-						const response = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'dustApi',
-							uploadRequestOptions,
-						);
-						returnData.push({
-							json: response,
-							pairedItem: { item: i }
-						});
-					} catch (requestError) {
-						throw requestError;
-					}
+					const response = await this.helpers.httpRequestWithAuthentication.call(
+						this,
+						'dustApi',
+						uploadRequestOptions,
+					);
+					returnData.push({
+						json: response,
+						pairedItem: { item: i },
+					});
 				}
 			} catch (error) {
+				if (this.continueOnFail()) {
+					returnData.push({
+						json: { error: (error as Error).message },
+						pairedItem: { item: i },
+					});
+					continue;
+				}
 				throw error;
 			}
 		}
