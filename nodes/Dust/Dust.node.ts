@@ -450,8 +450,11 @@ export class Dust implements INodeType {
 							returnData.push({
 								json: {
 									agentMessage: lastAgent.content ?? '',
+									chainOfThought: lastAgent.chainOfThought ?? null,
 									conversationId,
+									conversationTitle: poll.conversation.title ?? null,
 									conversationUrl,
+									rawConversation: poll.conversation,
 									userMessage,
 								},
 								pairedItem: { item: i },
