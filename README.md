@@ -55,17 +55,32 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 - **Parameters:**
   - Message: `What is the latest update on project X?`
   - Agent: (Select from dropdown)
-  - Additional Fields (optional): Username, Email, Timezone
+  - Additional Fields (optional): Username, Email, Full Name, Timezone, Wait For Completion, Poll Interval (Ms), Max Wait (Ms)
 
 **Output:**
 
 ```
 {
   "agentMessage": "Project X is on track for delivery next week.",
+  "conversationId": "ivxVYkiwhA",
   "conversationUrl": "https://dust.tt/w/{workspaceId}/assistant/{conversationId}",
   "userMessage": { ... }
 }
 ```
+
+#### Long-running agents & polling
+
+The node creates a conversation and then **polls** the Dust API until the agent finishes, before returning the final `agentMessage`. This matches the pattern used by Dust's own clients and avoids `502 Bad Gateway` errors that previously occurred for agents that take more than ~30 seconds (e.g. agents that call out to Jira, Slack, Google Docs, or other slow tools).
+
+You can tune the polling behavior via Additional Fields:
+
+| Field | Default | What it does |
+|---|---|---|
+| `Wait For Completion` | `true` | If off, the node returns immediately with just `{ conversationId, conversationUrl, userMessage }`. Use this when you want to manage polling yourself (e.g. with an HTTP Request + Wait loop). |
+| `Poll Interval (Ms)` | `1500` | Time between polling attempts while the agent is running. |
+| `Max Wait (Ms)` | `120000` | Hard ceiling on the total wait. If the agent has not reached `succeeded` by then, the node throws. |
+
+If the agent ends in `failed` or `cancelled`, the node throws with the error message from Dust. The conversation URL is included in the error so you can inspect it in the Dust UI.
 
 ### Upload a Document
 
@@ -103,6 +118,8 @@ Add these credentials in n8n under the "Dust API" credential type and reference 
 
 ## Version history
 
+- Unreleased
+  - Fix `502 Bad Gateway` for long-running agents by switching from blocking POST to non-blocking POST + polling on `GET /conversations/{id}`. Adds `Wait For Completion`, `Poll Interval (Ms)`, `Max Wait (Ms)`, and `Full Name` fields. Output now also includes `conversationId`.
 - 0.1.1
   - Add SkipToolsValidation + rename assitant to agent
 - 0.1.0

@@ -7,7 +7,12 @@ import {
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 	NodeConnectionTypes,
+	NodeOperationError,
 } from 'n8n-workflow';
+
+declare const setTimeout: (handler: () => void, ms: number) => unknown;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
 
 export class Dust implements INodeType {
 	description: INodeTypeDescription = {
@@ -134,12 +139,6 @@ export class Dust implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Username',
-						name: 'username',
-						type: 'string',
-						default: '',
-					},
-					{
 						displayName: 'Email',
 						name: 'email',
 						type: 'string',
@@ -147,10 +146,48 @@ export class Dust implements INodeType {
 						default: '',
 					},
 					{
+						displayName: 'Full Name',
+						name: 'fullName',
+						type: 'string',
+						default: '',
+						description: 'Display name of the caller (e.g. "Jane Doe"). Used for attribution in Dust.',
+					},
+					{
+						displayName: 'Max Wait (Ms)',
+						name: 'maxWaitMs',
+						type: 'number',
+						default: 120000,
+						description:
+							'Maximum total time to wait for the agent to finish, in milliseconds. Ignored when Wait For Completion is off.',
+					},
+					{
+						displayName: 'Poll Interval (Ms)',
+						name: 'pollIntervalMs',
+						type: 'number',
+						default: 1500,
+						description:
+							'Time between polling attempts when waiting for the agent to finish, in milliseconds',
+					},
+					{
 						displayName: 'Timezone',
 						name: 'timezone',
 						type: 'string',
 						default: '',
+					},
+					{
+						displayName: 'Username',
+						name: 'username',
+						type: 'string',
+						default: '',
+						description: 'Short identifier of the caller (e.g. "jane.doe"). Should not include the @domain part of an email.',
+					},
+					{
+						displayName: 'Wait For Completion',
+						name: 'waitForCompletion',
+						type: 'boolean',
+						default: true,
+						description:
+							'Whether to poll the conversation until the agent finishes and return its message. Turn off to return immediately with just the conversation ID.',
 					},
 				],
 			},
@@ -323,9 +360,20 @@ export class Dust implements INodeType {
 					const baseUrl = credentials.region === 'EU' ? 'https://eu.dust.tt' : 'https://dust.tt';
 					const fullUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations`;
 
+					const waitForCompletion =
+						additionalFields.waitForCompletion === undefined
+							? true
+							: (additionalFields.waitForCompletion as boolean);
+					const pollIntervalMs = Math.max(
+						250,
+						(additionalFields.pollIntervalMs as number) || 1500,
+					);
+					const maxWaitMs = Math.max(
+						pollIntervalMs,
+						(additionalFields.maxWaitMs as number) || 120000,
+					);
+
 					const body = {
-						blocking: true,
-						skipToolsValidation: true,
 						title: null,
 						visibility: 'unlisted',
 						message: {
@@ -334,7 +382,7 @@ export class Dust implements INodeType {
 								timezone: additionalFields.timezone || 'Europe/Paris',
 								username: additionalFields.username || 'DustN8N',
 								email: additionalFields.email || 'n8n@dust.tt',
-								fullName: null,
+								fullName: (additionalFields.fullName as string) || null,
 								profilePictureUrl: null,
 								origin: 'n8n',
 							},
@@ -356,31 +404,77 @@ export class Dust implements INodeType {
 						},
 					};
 
-					const response = await this.helpers.httpRequestWithAuthentication.call(
+					const createResponse = await this.helpers.httpRequestWithAuthentication.call(
 						this,
 						'dustApi',
 						requestOptions,
 					);
 
-					const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
+					const conversationId = createResponse.conversation.sId;
+					const ownerSId = createResponse.conversation.owner.sId;
+					const conversationUrl = `${baseUrl}/w/${ownerSId}/assistant/${conversationId}`;
 
-					const agentMessages = response.conversation.content
-						.flat()
-						.filter((m: any) => m.type === 'agent_message')
-						.map((am: any) => am.content);
+					if (!waitForCompletion) {
+						const userMessage = createResponse.conversation.content.flat()[0];
+						returnData.push({
+							json: {
+								conversationId,
+								conversationUrl,
+								userMessage,
+							},
+							pairedItem: { item: i },
+						});
+						continue;
+					}
 
-					const agentMessageStr =
-						agentMessages.length === 0 ? 'No message returned' : agentMessages.join('\n');
-					const userMessage = response.conversation.content.flat()[0];
+					const pollUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}`;
+					const deadline = Date.now() + maxWaitMs;
+					let lastAgent: any = null;
 
-					returnData.push({
-						json: {
-							agentMessage: agentMessageStr,
-							conversationUrl,
-							userMessage,
-						},
-						pairedItem: { item: i },
-					});
+					while (Date.now() < deadline) {
+						await sleep(pollIntervalMs);
+						const poll = await this.helpers.httpRequestWithAuthentication.call(this, 'dustApi', {
+							method: 'GET' as IHttpRequestMethods,
+							url: pollUrl,
+							headers: { Accept: 'application/json' },
+						});
+
+						const groups = (poll.conversation.content as any[][]) || [];
+						lastAgent = [...groups]
+							.reverse()
+							.flat()
+							.find((m: any) => m && m.type === 'agent_message');
+
+						if (lastAgent?.status === 'succeeded') {
+							const userMessage = poll.conversation.content.flat()[0];
+							returnData.push({
+								json: {
+									agentMessage: lastAgent.content ?? '',
+									conversationId,
+									conversationUrl,
+									userMessage,
+								},
+								pairedItem: { item: i },
+							});
+							break;
+						}
+
+						if (lastAgent?.status === 'failed' || lastAgent?.status === 'cancelled') {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Dust agent ${lastAgent.status}: ${lastAgent.error?.message ?? 'unknown error'}`,
+								{ itemIndex: i },
+							);
+						}
+					}
+
+					if (lastAgent?.status !== 'succeeded') {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Dust agent did not complete within ${maxWaitMs}ms (last status: ${lastAgent?.status ?? 'unknown'}). Conversation: ${conversationUrl}`,
+							{ itemIndex: i },
+						);
+					}
 				} else if (operation === 'uploadDocument') {
 					const spaceId = this.getNodeParameter('spaceId', i) as string;
 					const dataSourceName = this.getNodeParameter('dataSourceName', i) as string;
