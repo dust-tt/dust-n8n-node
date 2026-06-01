@@ -7,7 +7,33 @@ import {
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
 	NodeConnectionTypes,
+	NodeOperationError,
 } from 'n8n-workflow';
+
+declare const setTimeout: (handler: () => void, ms: number) => unknown;
+declare const Buffer: {
+	from(data: unknown, encoding?: string): { length: number; toString(encoding?: string): string };
+};
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+const TEXT_CONTENT_TYPE_HINTS = [
+	'text/',
+	'json',
+	'xml',
+	'javascript',
+	'html',
+	'csv',
+	'markdown',
+	'yaml',
+	'x-yaml',
+];
+
+const isTextualContentType = (contentType: string | null | undefined): boolean => {
+	if (!contentType) return false;
+	const ct = contentType.toLowerCase();
+	return TEXT_CONTENT_TYPE_HINTS.some((hint) => ct.includes(hint));
+};
 
 export class Dust implements INodeType {
 	description: INodeTypeDescription = {
@@ -134,12 +160,6 @@ export class Dust implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Username',
-						name: 'username',
-						type: 'string',
-						default: '',
-					},
-					{
 						displayName: 'Email',
 						name: 'email',
 						type: 'string',
@@ -147,10 +167,64 @@ export class Dust implements INodeType {
 						default: '',
 					},
 					{
+						displayName: 'Full Name',
+						name: 'fullName',
+						type: 'string',
+						default: '',
+						description: 'Display name of the caller (e.g. "Jane Doe"). Used for attribution in Dust.',
+					},
+					{
+						displayName: 'Include Generated File Content',
+						name: 'includeGeneratedFileContent',
+						type: 'boolean',
+						default: true,
+						description:
+							'Whether to download the content of each file the agent generates (Jira extracts, CSVs, HTML visualizations, …) and include it inline in the output. Turn off to keep only metadata (fileId, title, downloadUrl).',
+					},
+					{
+						displayName: 'Max Generated File Size (Bytes)',
+						name: 'maxGeneratedFileSizeBytes',
+						type: 'number',
+						default: 10000000,
+						description:
+							'Per-file size ceiling when downloading generated file content. Larger files are reported with `tooLarge: true` and their content is omitted. Ignored when Include Generated File Content is off.',
+					},
+					{
+						displayName: 'Max Wait (Ms)',
+						name: 'maxWaitMs',
+						type: 'number',
+						default: 120000,
+						description:
+							'Maximum total time to wait for the agent to finish, in milliseconds. Ignored when Wait For Completion is off.',
+					},
+					{
+						displayName: 'Poll Interval (Ms)',
+						name: 'pollIntervalMs',
+						type: 'number',
+						default: 1500,
+						description:
+							'Time between polling attempts when waiting for the agent to finish, in milliseconds',
+					},
+					{
 						displayName: 'Timezone',
 						name: 'timezone',
 						type: 'string',
 						default: '',
+					},
+					{
+						displayName: 'Username',
+						name: 'username',
+						type: 'string',
+						default: '',
+						description: 'Short identifier of the caller (e.g. "jane.doe"). Should not include the @domain part of an email.',
+					},
+					{
+						displayName: 'Wait For Completion',
+						name: 'waitForCompletion',
+						type: 'boolean',
+						default: true,
+						description:
+							'Whether to poll the conversation until the agent finishes and return its message. Turn off to return immediately with just the conversation ID.',
 					},
 				],
 			},
@@ -323,9 +397,28 @@ export class Dust implements INodeType {
 					const baseUrl = credentials.region === 'EU' ? 'https://eu.dust.tt' : 'https://dust.tt';
 					const fullUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations`;
 
+					const waitForCompletion =
+						additionalFields.waitForCompletion === undefined
+							? true
+							: (additionalFields.waitForCompletion as boolean);
+					const pollIntervalMs = Math.max(
+						250,
+						(additionalFields.pollIntervalMs as number) || 1500,
+					);
+					const maxWaitMs = Math.max(
+						pollIntervalMs,
+						(additionalFields.maxWaitMs as number) || 120000,
+					);
+					const includeGeneratedFileContent =
+						additionalFields.includeGeneratedFileContent === undefined
+							? true
+							: (additionalFields.includeGeneratedFileContent as boolean);
+					const maxGeneratedFileSizeBytes = Math.max(
+						1,
+						(additionalFields.maxGeneratedFileSizeBytes as number) || 10000000,
+					);
+
 					const body = {
-						blocking: true,
-						skipToolsValidation: true,
 						title: null,
 						visibility: 'unlisted',
 						message: {
@@ -334,7 +427,7 @@ export class Dust implements INodeType {
 								timezone: additionalFields.timezone || 'Europe/Paris',
 								username: additionalFields.username || 'DustN8N',
 								email: additionalFields.email || 'n8n@dust.tt',
-								fullName: null,
+								fullName: (additionalFields.fullName as string) || null,
 								profilePictureUrl: null,
 								origin: 'n8n',
 							},
@@ -356,31 +449,161 @@ export class Dust implements INodeType {
 						},
 					};
 
-					const response = await this.helpers.httpRequestWithAuthentication.call(
+					const createResponse = await this.helpers.httpRequestWithAuthentication.call(
 						this,
 						'dustApi',
 						requestOptions,
 					);
 
-					const conversationUrl = `${baseUrl}/w/${response.conversation.owner.sId}/assistant/${response.conversation.sId}`;
+					const conversationId = createResponse.conversation.sId;
+					const ownerSId = createResponse.conversation.owner.sId;
+					const conversationUrl = `${baseUrl}/w/${ownerSId}/assistant/${conversationId}`;
 
-					const agentMessages = response.conversation.content
-						.flat()
-						.filter((m: any) => m.type === 'agent_message')
-						.map((am: any) => am.content);
+					if (!waitForCompletion) {
+						const userMessage = createResponse.conversation.content.flat()[0];
+						returnData.push({
+							json: {
+								conversationId,
+								conversationUrl,
+								userMessage,
+							},
+							pairedItem: { item: i },
+						});
+						continue;
+					}
 
-					const agentMessageStr =
-						agentMessages.length === 0 ? 'No message returned' : agentMessages.join('\n');
-					const userMessage = response.conversation.content.flat()[0];
+					const pollUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations/${conversationId}`;
+					const deadline = Date.now() + maxWaitMs;
+					let lastAgent: any = null;
 
-					returnData.push({
-						json: {
-							agentMessage: agentMessageStr,
-							conversationUrl,
-							userMessage,
-						},
-						pairedItem: { item: i },
-					});
+					while (Date.now() < deadline) {
+						await sleep(pollIntervalMs);
+						const poll = await this.helpers.httpRequestWithAuthentication.call(this, 'dustApi', {
+							method: 'GET' as IHttpRequestMethods,
+							url: pollUrl,
+							headers: { Accept: 'application/json' },
+						});
+
+						const groups = (poll.conversation.content as any[][]) || [];
+						lastAgent = [...groups]
+							.reverse()
+							.flat()
+							.find((m: any) => m && m.type === 'agent_message');
+
+						if (lastAgent?.status === 'succeeded') {
+							const userMessage = poll.conversation.content.flat()[0];
+
+							const seenFileIds = new Set<string>();
+							const generatedFiles: IDataObject[] = [];
+
+							const collectFile = (
+								file: any,
+								source: { actionSId?: string; toolName?: string },
+							) => {
+								if (!file?.fileId || seenFileIds.has(file.fileId)) return;
+								seenFileIds.add(file.fileId);
+								generatedFiles.push({
+									fileId: file.fileId,
+									title: file.title ?? null,
+									contentType: file.contentType ?? null,
+									snippet: file.snippet ?? null,
+									downloadUrl: `${baseUrl}/api/w/${credentials.workspaceId}/files/${file.fileId}?action=download`,
+									fromToolName: source.toolName ?? null,
+									fromActionSId: source.actionSId ?? null,
+								});
+							};
+
+							if (Array.isArray(lastAgent.generatedFiles)) {
+								for (const file of lastAgent.generatedFiles) collectFile(file, {});
+							}
+							if (Array.isArray(lastAgent.actions)) {
+								for (const action of lastAgent.actions) {
+									if (Array.isArray(action.generatedFiles)) {
+										for (const file of action.generatedFiles) {
+											collectFile(file, {
+												actionSId: action.sId,
+												toolName: action.toolName,
+											});
+										}
+									}
+								}
+							}
+
+							if (includeGeneratedFileContent && generatedFiles.length > 0) {
+								for (const file of generatedFiles) {
+									try {
+										const fileRes: any =
+											await this.helpers.httpRequestWithAuthentication.call(
+												this,
+												'dustApi',
+												{
+													method: 'GET' as IHttpRequestMethods,
+													url: file.downloadUrl as string,
+													encoding: 'arraybuffer',
+													returnFullResponse: true,
+													headers: { Accept: '*/*' },
+												},
+											);
+
+										const responseContentType =
+											(fileRes.headers?.['content-type'] as string | undefined) ??
+											(file.contentType as string | undefined) ??
+											null;
+										const body = fileRes.body;
+										const size: number = body?.length ?? 0;
+
+										file.size = size;
+										file.responseContentType = responseContentType;
+
+										if (size > maxGeneratedFileSizeBytes) {
+											file.tooLarge = true;
+											continue;
+										}
+
+										const buf = Buffer.from(body);
+										if (isTextualContentType(responseContentType)) {
+											file.content = buf.toString('utf-8');
+										} else {
+											file.contentBase64 = buf.toString('base64');
+										}
+									} catch (error) {
+										file.downloadError = (error as Error).message ?? 'unknown error';
+									}
+								}
+							}
+
+							returnData.push({
+								json: {
+									agentMessage: lastAgent.content ?? '',
+									chainOfThought: lastAgent.chainOfThought ?? null,
+									conversationId,
+									conversationTitle: poll.conversation.title ?? null,
+									conversationUrl,
+									generatedFiles,
+									rawConversation: poll.conversation,
+									userMessage,
+								},
+								pairedItem: { item: i },
+							});
+							break;
+						}
+
+						if (lastAgent?.status === 'failed' || lastAgent?.status === 'cancelled') {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Dust agent ${lastAgent.status}: ${lastAgent.error?.message ?? 'unknown error'}`,
+								{ itemIndex: i },
+							);
+						}
+					}
+
+					if (lastAgent?.status !== 'succeeded') {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Dust agent did not complete within ${maxWaitMs}ms (last status: ${lastAgent?.status ?? 'unknown'}). Conversation: ${conversationUrl}`,
+							{ itemIndex: i },
+						);
+					}
 				} else if (operation === 'uploadDocument') {
 					const spaceId = this.getNodeParameter('spaceId', i) as string;
 					const dataSourceName = this.getNodeParameter('dataSourceName', i) as string;
