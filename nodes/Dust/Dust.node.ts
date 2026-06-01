@@ -11,8 +11,29 @@ import {
 } from 'n8n-workflow';
 
 declare const setTimeout: (handler: () => void, ms: number) => unknown;
+declare const Buffer: {
+	from(data: unknown, encoding?: string): { length: number; toString(encoding?: string): string };
+};
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+const TEXT_CONTENT_TYPE_HINTS = [
+	'text/',
+	'json',
+	'xml',
+	'javascript',
+	'html',
+	'csv',
+	'markdown',
+	'yaml',
+	'x-yaml',
+];
+
+const isTextualContentType = (contentType: string | null | undefined): boolean => {
+	if (!contentType) return false;
+	const ct = contentType.toLowerCase();
+	return TEXT_CONTENT_TYPE_HINTS.some((hint) => ct.includes(hint));
+};
 
 export class Dust implements INodeType {
 	description: INodeTypeDescription = {
@@ -151,6 +172,22 @@ export class Dust implements INodeType {
 						type: 'string',
 						default: '',
 						description: 'Display name of the caller (e.g. "Jane Doe"). Used for attribution in Dust.',
+					},
+					{
+						displayName: 'Include Generated File Content',
+						name: 'includeGeneratedFileContent',
+						type: 'boolean',
+						default: true,
+						description:
+							'Whether to download the content of each file the agent generates (Jira extracts, CSVs, HTML visualizations, …) and include it inline in the output. Turn off to keep only metadata (fileId, title, downloadUrl).',
+					},
+					{
+						displayName: 'Max Generated File Size (Bytes)',
+						name: 'maxGeneratedFileSizeBytes',
+						type: 'number',
+						default: 10000000,
+						description:
+							'Per-file size ceiling when downloading generated file content. Larger files are reported with `tooLarge: true` and their content is omitted. Ignored when Include Generated File Content is off.',
 					},
 					{
 						displayName: 'Max Wait (Ms)',
@@ -372,6 +409,14 @@ export class Dust implements INodeType {
 						pollIntervalMs,
 						(additionalFields.maxWaitMs as number) || 120000,
 					);
+					const includeGeneratedFileContent =
+						additionalFields.includeGeneratedFileContent === undefined
+							? true
+							: (additionalFields.includeGeneratedFileContent as boolean);
+					const maxGeneratedFileSizeBytes = Math.max(
+						1,
+						(additionalFields.maxGeneratedFileSizeBytes as number) || 10000000,
+					);
 
 					const body = {
 						title: null,
@@ -447,6 +492,86 @@ export class Dust implements INodeType {
 
 						if (lastAgent?.status === 'succeeded') {
 							const userMessage = poll.conversation.content.flat()[0];
+
+							const seenFileIds = new Set<string>();
+							const generatedFiles: IDataObject[] = [];
+
+							const collectFile = (
+								file: any,
+								source: { actionSId?: string; toolName?: string },
+							) => {
+								if (!file?.fileId || seenFileIds.has(file.fileId)) return;
+								seenFileIds.add(file.fileId);
+								generatedFiles.push({
+									fileId: file.fileId,
+									title: file.title ?? null,
+									contentType: file.contentType ?? null,
+									snippet: file.snippet ?? null,
+									downloadUrl: `${baseUrl}/api/w/${credentials.workspaceId}/files/${file.fileId}?action=download`,
+									fromToolName: source.toolName ?? null,
+									fromActionSId: source.actionSId ?? null,
+								});
+							};
+
+							if (Array.isArray(lastAgent.generatedFiles)) {
+								for (const file of lastAgent.generatedFiles) collectFile(file, {});
+							}
+							if (Array.isArray(lastAgent.actions)) {
+								for (const action of lastAgent.actions) {
+									if (Array.isArray(action.generatedFiles)) {
+										for (const file of action.generatedFiles) {
+											collectFile(file, {
+												actionSId: action.sId,
+												toolName: action.toolName,
+											});
+										}
+									}
+								}
+							}
+
+							if (includeGeneratedFileContent && generatedFiles.length > 0) {
+								for (const file of generatedFiles) {
+									try {
+										const fileRes: any =
+											await this.helpers.httpRequestWithAuthentication.call(
+												this,
+												'dustApi',
+												{
+													method: 'GET' as IHttpRequestMethods,
+													url: file.downloadUrl as string,
+													encoding: 'arraybuffer',
+													returnFullResponse: true,
+													headers: { Accept: '*/*' },
+												},
+											);
+
+										const responseContentType =
+											(fileRes.headers?.['content-type'] as string | undefined) ??
+											(file.contentType as string | undefined) ??
+											null;
+										const body = fileRes.body;
+										const size: number = body?.length ?? 0;
+
+										file.size = size;
+										file.responseContentType = responseContentType;
+
+										if (size > maxGeneratedFileSizeBytes) {
+											file.tooLarge = true;
+											continue;
+										}
+
+										const buf = Buffer.from(body);
+										if (isTextualContentType(responseContentType)) {
+											file.content = buf.toString('utf-8');
+										} else {
+											file.contentBase64 = buf.toString('base64');
+										}
+									} catch (error) {
+										file.downloadError = (error as Error).message ?? 'unknown error';
+									}
+								}
+							}
+
 							returnData.push({
 								json: {
 									agentMessage: lastAgent.content ?? '',
@@ -454,6 +579,7 @@ export class Dust implements INodeType {
 									conversationId,
 									conversationTitle: poll.conversation.title ?? null,
 									conversationUrl,
+									generatedFiles,
 									rawConversation: poll.conversation,
 									userMessage,
 								},
