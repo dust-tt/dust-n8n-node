@@ -165,7 +165,7 @@ export class Dust implements INodeType {
 						displayName: 'Share With Groups',
 						name: 'shareWithGroups',
 						type: 'string',
-						placeholder: 'Engineering, Sales',
+						placeholder: 'Workspace, Engineering',
 						default: '',
 						description:
 							'Comma-separated names of workspace groups that get access to the conversation',
