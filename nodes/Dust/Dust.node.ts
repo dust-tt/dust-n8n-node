@@ -152,6 +152,24 @@ export class Dust implements INodeType {
 						type: 'string',
 						default: '',
 					},
+					{
+						displayName: 'Share With Emails',
+						name: 'shareWithEmails',
+						type: 'string',
+						placeholder: 'name@email.com, other@email.com',
+						default: '',
+						description:
+							'Comma-separated emails of workspace members who get access to the conversation',
+					},
+					{
+						displayName: 'Share With Groups',
+						name: 'shareWithGroups',
+						type: 'string',
+						placeholder: 'Engineering, Sales',
+						default: '',
+						description:
+							'Comma-separated names of workspace groups that get access to the conversation',
+					},
 				],
 			},
 			// Upload Document Parameters
@@ -323,7 +341,17 @@ export class Dust implements INodeType {
 					const baseUrl = credentials.region === 'EU' ? 'https://eu.dust.tt' : 'https://dust.tt';
 					const fullUrl = `${baseUrl}/api/v1/w/${credentials.workspaceId}/assistant/conversations`;
 
-					const body = {
+					const splitList = (value: unknown) =>
+						String(value ?? '')
+							.split(',')
+							.map((entry) => entry.trim())
+							.filter((entry) => entry.length > 0);
+					const sharedWith = [
+						...splitList(additionalFields.shareWithEmails).map((email) => ({ email })),
+						...splitList(additionalFields.shareWithGroups).map((groupName) => ({ groupName })),
+					];
+
+					const body: IDataObject = {
 						blocking: true,
 						skipToolsValidation: true,
 						title: null,
@@ -345,6 +373,9 @@ export class Dust implements INodeType {
 							],
 						},
 					};
+					if (sharedWith.length > 0) {
+						body.sharedWith = sharedWith;
+					}
 
 					const requestOptions = {
 						method: 'POST' as IHttpRequestMethods,
