@@ -134,22 +134,10 @@ export class Dust implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Username',
-						name: 'username',
-						type: 'string',
-						default: '',
-					},
-					{
 						displayName: 'Email',
 						name: 'email',
 						type: 'string',
 						placeholder: 'name@email.com',
-						default: '',
-					},
-					{
-						displayName: 'Timezone',
-						name: 'timezone',
-						type: 'string',
 						default: '',
 					},
 					{
@@ -169,6 +157,18 @@ export class Dust implements INodeType {
 						default: '',
 						description:
 							'Comma-separated names of workspace groups that get access to the conversation',
+					},
+					{
+						displayName: 'Timezone',
+						name: 'timezone',
+						type: 'string',
+						default: '',
+					},
+					{
+						displayName: 'Username',
+						name: 'username',
+						type: 'string',
+						default: '',
 					},
 				],
 			},
