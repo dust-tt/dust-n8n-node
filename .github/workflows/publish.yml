@@ -1,13 +1,12 @@
-# Publishes the package to npm with a provenance statement on every version tag push.
+# Publishes the package to npm with a provenance statement. Run it manually from the Actions tab
+# after merging a version bump.
 # n8n requires verified community nodes to be published from GitHub Actions with provenance.
 # Auth uses npm trusted publishing (OIDC): add this repository and `publish.yml` as a trusted
 # publisher in the npm package settings. No NPM_TOKEN secret is needed.
 name: Publish
 
 on:
-  push:
-    tags:
-      - '*.*.*'
+  workflow_dispatch:
 
 jobs:
   publish:
