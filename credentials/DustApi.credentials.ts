@@ -8,7 +8,7 @@ import {
 export class DustApi implements ICredentialType {
 	name = 'dustApi';
 	displayName = 'Dust API';
-	documentationUrl = 'https://dust.tt/docs';
+	documentationUrl = 'https://docs.dust.tt/docs/n8n';
 
 	authenticate: IAuthenticateGeneric = {
 		type: 'generic',
