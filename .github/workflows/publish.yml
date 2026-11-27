@@ -1,0 +1,34 @@
+# Publishes the package to npm with a provenance statement on every version tag push.
+# n8n requires verified community nodes to be published from GitHub Actions with provenance.
+# Auth uses npm trusted publishing (OIDC): add this repository and `publish.yml` as a trusted
+# publisher in the npm package settings. No NPM_TOKEN secret is needed.
+name: Publish
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      # Trusted publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install -g npm@latest
+      - name: Install dependencies
+        run: npm ci
+      # prepublishOnly runs the build and the prepublish lint.
+      - name: Publish
+        run: npm publish --provenance --access public
